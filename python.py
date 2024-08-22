@@ -1,8 +1,8 @@
-//fetch an arrow format data and a json in a single fetch call in a react application
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
 from requests_toolbelt.multipart import MultipartEncoder
 import pyarrow as pa
+import pyarrow.parquet as pq
 import pandas as pd
 import io
 
@@ -12,26 +12,26 @@ app = FastAPI()
 def get_data():
     # Create JSON data
     json_data = '{"key": "value"}'
-
-    # Create Arrow data
+    
+    # Create DataFrame and convert it to Arrow Table
     df = pd.DataFrame({'column1': [1, 2, 3], 'column2': [4, 5, 6]})
     arrow_table = pa.Table.from_pandas(df)
-    arrow_buffer = pa.BufferOutputStream()
-    writer = pa.ipc.new_file(arrow_buffer, arrow_table.schema)
-    writer.write_table(arrow_table)
-    writer.close()
-
+    
+    # Prepare Arrow stream with LZ4 compression
+    arrow_buffer = io.BytesIO()
+    with pa.ipc.RecordBatchStreamWriter(arrow_buffer, arrow_table.schema, options=pa.ipc.IpcWriteOptions(compression="lz4")) as writer:
+        writer.write_table(arrow_table)
+    
+    # Reset the buffer position to the beginning
+    arrow_buffer.seek(0)
+    
     # Prepare Multipart Encoder
     fields = {
         'json': ('json', json_data, 'application/json'),
-        'arrow': ('arrow', arrow_buffer.getvalue().to_pybytes(), 'application/vnd.apache.arrow.file'),
+        'arrow': ('arrow', arrow_buffer, 'application/vnd.apache.arrow.stream'),
     }
     
-    # Create MultipartEncoder with fields
     encoder = MultipartEncoder(fields=fields)
     
-    # Convert MultipartEncoder to a bytes buffer
-    buffer = io.BytesIO(encoder.to_string())
-
-    # Return the StreamingResponse
-    return StreamingResponse(content=buffer, media_type='multipart/mixed; boundary={}'.format(encoder.boundary))
+    # Return StreamingResponse
+    return StreamingResponse(content=encoder, media_type=f'multipart/mixed; boundary={encoder.boundary}')
