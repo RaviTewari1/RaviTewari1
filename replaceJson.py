@@ -2,7 +2,7 @@ import re
 
 def update_json_keys(data, key_path, replacement_keys):
     # Regular expression to match keys that start with a date and end with '|abc'
-    pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}).*\|abc$')
+    pattern = re.compile(rf'^(\d{{4}}-\d{{2}}-\d{{2}}).*\|{suffix}$')
     
     try:
         # Navigate to the target dictionary using the key path
