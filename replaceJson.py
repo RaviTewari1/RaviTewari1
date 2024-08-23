@@ -5,14 +5,12 @@ def update_json_keys(data, key_path, replacement_keys):
     pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}).*\|abc$')
     
     try:
-        # Split the key path and navigate to the target dictionary
-        path_elements = key_path.split('.')
+        # Navigate to the target dictionary using the key path
         target_dict = data
-        for elem in path_elements:
-            if isinstance(target_dict, dict):
-                target_dict = target_dict.get(elem, {})
-            else:
-                return data  # If path element is not a dict, return the original data
+        for elem in key_path.split('.'):
+            target_dict = target_dict.get(elem, {})
+            if not isinstance(target_dict, dict):
+                return data  # If not a dict, return original data
 
         # Ensure that target_dict is a dictionary
         if not isinstance(target_dict, dict):
