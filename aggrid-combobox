@@ -1,0 +1,129 @@
+import React, { useRef, useState, useEffect } from "react";
+import { ComboBox } from "@salt-ds/core";
+import { AgGridReact } from "ag-grid-react";
+import "ag-grid-community/styles/ag-grid.css";
+import "ag-grid-community/styles/ag-theme-alpine.css";
+import "./styles.css"; // Create this file for custom styles
+
+const GridDropdown = ({ rowData, columnDefs, onRowSelected, gridWidth }) => {
+  const gridRef = useRef(null);
+
+  const onGridReady = (params) => {
+    params.api.sizeColumnsToFit();
+  };
+
+  return (
+    <div
+      className="ag-theme-alpine"
+      style={{ 
+        width: gridWidth || "100%",
+        height: 200,
+        minWidth: "100%"
+      }}
+    >
+      <AgGridReact
+        ref={gridRef}
+        rowData={rowData}
+        columnDefs={columnDefs}
+        onGridReady={onGridReady}
+        rowSelection="single"
+        onRowSelected={onRowSelected}
+        domLayout="autoHeight"
+      />
+    </div>
+  );
+};
+
+const CustomComboBox = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [gridWidth, setGridWidth] = useState(null);
+  const comboBoxRef = useRef(null);
+  const gridContainerRef = useRef(null);
+
+  // Sample data
+  const rowData = [
+    { id: 1, name: "Alice", role: "Developer" },
+    { id: 2, name: "Bob", role: "Designer" },
+    { id: 3, name: "Charlie", role: "Manager" }
+  ];
+
+  const columnDefs = [
+    { field: "id", headerName: "ID", width: 100 },
+    { field: "name", headerName: "Name", width: 150 },
+    { field: "role", headerName: "Role", width: 200 }
+  ];
+
+  const handleRowSelected = (event) => {
+    if (event.node.isSelected()) {
+      setValue(event.data.name);
+      setIsOpen(false);
+    }
+  };
+
+  const calculateGridWidth = () => {
+    if (gridContainerRef.current) {
+      const gridElement = gridContainerRef.current.querySelector(".ag-root-wrapper");
+      if (gridElement) {
+        setGridWidth(gridElement.offsetWidth);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      // Delay calculation to allow grid to render
+      setTimeout(calculateGridWidth, 0);
+    }
+  }, [isOpen]);
+
+  return (
+    <div style={{ position: "relative" }} ref={comboBoxRef}>
+      <ComboBox
+        inputRef={comboBoxRef}
+        value={value}
+        onClick={() => setIsOpen(!isOpen)}
+        onFocus={() => setIsOpen(true)}
+        placeholder="Select an option"
+        style={{ width: 300 }}
+      />
+
+      {isOpen && (
+        <div
+          ref={gridContainerRef}
+          className="custom-grid-dropdown"
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            zIndex: 1000,
+            width: gridWidth ? `${gridWidth}px` : "auto",
+            minWidth: comboBoxRef.current?.offsetWidth || "100%"
+          }}
+        >
+          <GridDropdown
+            rowData={rowData}
+            columnDefs={columnDefs}
+            onRowSelected={handleRowSelected}
+            gridWidth={gridWidth}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Add click-outside handler
+const useClickOutside = (ref, callback) => {
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) {
+        callback();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [ref, callback]);
+};
+
+export default CustomComboBox;
