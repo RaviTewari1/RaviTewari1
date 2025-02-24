@@ -1,89 +1,66 @@
 import { useState, useEffect, useRef } from 'react';
 
-const CACHE_KEY = 'cached-component';
+const COMPONENT_CACHE_KEY = 'cached-component-v1';
 
 const CacheableComponent = () => {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [showCached, setShowCached] = useState(false);
   const componentRef = useRef<HTMLDivElement>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [cachedMarkup, setCachedMarkup] = useState('');
 
-  // Cache the component's HTML structure
+  // 1. Cache the component HTML on mount and before unload
   const cacheComponent = () => {
     if (componentRef.current && isOnline) {
-      const htmlContent = componentRef.current.outerHTML;
-      const styles = Array.from(document.styleSheets)
-        .map(sheet => {
-          try {
-            return Array.from(sheet.cssRules).map(rule => rule.cssText).join('');
-          } catch (e) {
-            return '';
-          }
-        })
-        .join('');
-      
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
-        html: htmlContent,
-        styles: styles,
-        timestamp: Date.now()
-      }));
+      const html = componentRef.current.outerHTML;
+      localStorage.setItem(COMPONENT_CACHE_KEY, html);
     }
   };
 
-  // Load cached component
-  const loadCachedComponent = () => {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      setShowCached(true);
-    }
+  // 2. Restore from cache when page loads
+  const restoreFromCache = () => {
+    const savedHtml = localStorage.getItem(COMPONENT_CACHE_KEY);
+    if (savedHtml) setCachedMarkup(savedHtml);
   };
 
-  // Initial cache on mount
+  // 3. Event listeners setup
   useEffect(() => {
+    // Initial cache
     cacheComponent();
+    
+    // Cache before page unload
     window.addEventListener('beforeunload', cacheComponent);
-
-    return () => {
-      window.removeEventListener('beforeunload', cacheComponent);
-    };
-  }, []);
-
-  // Network status detection
-  useEffect(() => {
+    
+    // Restore on page load
+    window.addEventListener('load', restoreFromCache);
+    
+    // Network detection
     const handleNetworkChange = () => {
-      const newStatus = navigator.onLine;
-      setIsOnline(newStatus);
-      if (!newStatus) loadCachedComponent();
+      setIsOnline(navigator.onLine);
+      if (!navigator.onLine) restoreFromCache();
     };
 
     window.addEventListener('online', handleNetworkChange);
     window.addEventListener('offline', handleNetworkChange);
 
     return () => {
+      window.removeEventListener('beforeunload', cacheComponent);
+      window.removeEventListener('load', restoreFromCache);
       window.removeEventListener('online', handleNetworkChange);
       window.removeEventListener('offline', handleNetworkChange);
     };
   }, []);
 
-  if (showCached && !isOnline) {
-    const cachedData = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
-    return (
-      <div dangerouslySetInnerHTML={{ 
-        __html: `
-          <style>${cachedData.styles}</style>
-          ${cachedData.html}
-        `
-      }} />
-    );
+  if (!isOnline && cachedMarkup) {
+    return <div dangerouslySetInnerHTML={{ __html: cachedMarkup }} />;
   }
 
   return (
     <div ref={componentRef}>
-      <h2>Cacheable Component</h2>
-      <p>This component will be cached for offline use</p>
-      <button onClick={() => alert('Cached interaction works!')}>
-        Test Button
+      <h2>Offline-Ready Component</h2>
+      <p>This component will survive server downtime</p>
+      <button onClick={() => alert('Works in offline mode!')}>
+        Test Interaction
       </button>
-      {!isOnline && <p>Offline Version</p>}
+      {!isOnline && <p>⚠️ Currently offline - using cached version</p>}
     </div>
   );
 };
