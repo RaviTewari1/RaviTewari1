@@ -1,61 +1,58 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
-interface CachedData {
-  data: any;
-  timestamp: number;
-}
+const CACHE_KEY = 'cached-component';
 
 const CacheableComponent = () => {
-  const [data, setData] = useState<any>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [showCached, setShowCached] = useState(false);
+  const componentRef = useRef<HTMLDivElement>(null);
 
-  // Cache data in localStorage
-  const cacheData = (newData: any) => {
-    const cache: CachedData = {
-      data: newData,
-      timestamp: Date.now()
-    };
-    localStorage.setItem('cachedRoute', JSON.stringify(cache));
+  // Cache the component's HTML structure
+  const cacheComponent = () => {
+    if (componentRef.current && isOnline) {
+      const htmlContent = componentRef.current.outerHTML;
+      const styles = Array.from(document.styleSheets)
+        .map(sheet => {
+          try {
+            return Array.from(sheet.cssRules).map(rule => rule.cssText).join('');
+          } catch (e) {
+            return '';
+          }
+        })
+        .join('');
+      
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        html: htmlContent,
+        styles: styles,
+        timestamp: Date.now()
+      }));
+    }
   };
 
-  // Load data from cache or API
+  // Load cached component
+  const loadCachedComponent = () => {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      setShowCached(true);
+    }
+  };
+
+  // Initial cache on mount
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      setError(null);
+    cacheComponent();
+    window.addEventListener('beforeunload', cacheComponent);
 
-      try {
-        if (isOnline) {
-          // Fetch fresh data
-          const response = await fetch('https://api.example.com/data');
-          if (!response.ok) throw new Error('Failed to fetch');
-          const newData = await response.json();
-          setData(newData);
-          cacheData(newData);
-        } else {
-          // Load cached data
-          const cached = localStorage.getItem('cachedRoute');
-          if (cached) {
-            const parsedCache: CachedData = JSON.parse(cached);
-            setData(parsedCache.data);
-          }
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-      } finally {
-        setLoading(false);
-      }
+    return () => {
+      window.removeEventListener('beforeunload', cacheComponent);
     };
-
-    loadData();
-  }, [isOnline]);
+  }, []);
 
   // Network status detection
   useEffect(() => {
     const handleNetworkChange = () => {
-      setIsOnline(navigator.onLine);
+      const newStatus = navigator.onLine;
+      setIsOnline(newStatus);
+      if (!newStatus) loadCachedComponent();
     };
 
     window.addEventListener('online', handleNetworkChange);
@@ -67,25 +64,26 @@ const CacheableComponent = () => {
     };
   }, []);
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (showCached && !isOnline) {
+    const cachedData = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+    return (
+      <div dangerouslySetInnerHTML={{ 
+        __html: `
+          <style>${cachedData.styles}</style>
+          ${cachedData.html}
+        `
+      }} />
+    );
+  }
 
   return (
-    <div>
-      <h2>Cacheable Content</h2>
-      {!isOnline && <p>⚠️ Currently offline - showing cached content</p>}
-      
-      {data ? (
-        <div>
-          <p>Last updated: {new Date(data.timestamp).toLocaleString()}</p>
-          {/* Render your data here */}
-          {data.items?.map((item: any) => (
-            <div key={item.id}>{item.name}</div>
-          ))}
-        </div>
-      ) : (
-        <p>No data available</p>
-      )}
+    <div ref={componentRef}>
+      <h2>Cacheable Component</h2>
+      <p>This component will be cached for offline use</p>
+      <button onClick={() => alert('Cached interaction works!')}>
+        Test Button
+      </button>
+      {!isOnline && <p>Offline Version</p>}
     </div>
   );
 };
